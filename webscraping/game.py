@@ -62,21 +62,21 @@ def get_game_summary(game_pk):
             
     return summary
 
-# Example usage:
-game_pk = 748266  # You can change this to any game ID
-summary = get_game_summary(game_pk)
+# # Example usage:
+# game_pk = 748266  # You can change this to any game ID
+# summary = get_game_summary(game_pk)
 
-# Print summary in a formatted way
-for key, value in summary.items():
-    if key != 'Top Performers':
-        print(f"{key}: {value}")
-    else:
-        print("\nTop Performers:")
-        for performer in value:
-            print(f"\n  {performer['Name']} ({performer['Position']}):")
-            print(f"  - Performance: {performer['Stats']}")
-            print(f"  - Type: {performer['Type']}")
-            print(f"  - Game Score: {performer['Game Score']}")
+# # Print summary in a formatted way
+# for key, value in summary.items():
+#     if key != 'Top Performers':
+#         print(f"{key}: {value}")
+#     else:
+#         print("\nTop Performers:")
+#         for performer in value:
+#             print(f"\n  {performer['Name']} ({performer['Position']}):")
+#             print(f"  - Performance: {performer['Stats']}")
+#             print(f"  - Type: {performer['Type']}")
+#             print(f"  - Game Score: {performer['Game Score']}")
 
 
 if __name__ == "__main__":

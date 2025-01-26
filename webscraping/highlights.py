@@ -4,7 +4,8 @@ import json
 def download_highlights(game_id):
     url = f"https://statsapi.mlb.com/api/v1/game/{game_id}/content"
     data = requests.get(url).json()
-    
+    with open("game_data.json", "w") as f:
+        json.dump(data, f)
     # Use the correct path for highlights
     highlights = data.get("highlights", {}).get("highlights", {}).get("items", [])
     if not highlights:
@@ -60,14 +61,16 @@ def download_highlights(game_id):
         # STEP 3: If still None, fallback to last playback in list
         if not mp4_url:
             mp4_url = playbacks[-1].get("url")
-        
-        print(f"{i}. {title}")
-        print(f"   Video URL: {mp4_url}\n")
-        
+
+        # Try to find jpg
+        jpg = clip.get("image", {}).get("cuts", [])[0]
+
+
         
         print(f"{i}. {title}")
         print(f"   Video URL: {mp4_url}\n")
         print(f"   Date: {date}\n")
+        print(f"   Image URL: {jpg['src']}\n")
         
         # If you want to actually download the clip:
         # video_data = requests.get(clip_url).content
