@@ -20,6 +20,11 @@ pytest = "^8.3.4"
 beautifulsoup4 = "^4.12.3"
 pytz = "^2024.2"
 python-dateutil = "^2.9.0.post0"
+moviepy = "^2.1.2"
+google-generativeai = "^0.8.3"
+google-genai = "^0.5.0"
+pandas = "^2.2.3"
+google-cloud-discoveryengine = "^0.13.5"
 
 
 [build-system]
