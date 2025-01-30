@@ -71,7 +71,6 @@ def download_highlights(game_id):
         print(f"   Video URL: {mp4_url}\n")
         print(f"   Date: {date}\n")
         print(f"   Image URL: {jpg['src']}\n")
-
         # If you want to actually download the clip:
         # video_data = requests.get(clip_url).content
         # with open(f"{title}.mp4", "wb") as f:

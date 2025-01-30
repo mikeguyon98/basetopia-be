@@ -25,7 +25,6 @@ EVENT_TO_PLAYER_ROLE = {
     'field_out': 'pitcher',
 }
 
-
 def find_event_by_timestamp(data, target_timestamp):
     """
     Finds and returns the event that matches the target timestamp.
@@ -59,7 +58,6 @@ def find_event_by_timestamp(data, target_timestamp):
 
     return None
 
-
 def find_team_by_player_id(db, mlb_person_id):
     """
     Finds and returns the team information for a given MLB person ID.
@@ -92,16 +90,13 @@ def find_team_by_player_id(db, mlb_person_id):
         print(f"Error finding team: {str(e)}")
         return None
 
-
 def get_game_info(game_pk, db):
     game_pk = 748266
-    game_feed_url = f'https://statsapi.mlb.com/api/v1.1/game/{
-        game_pk}/feed/live'
+    game_feed_url = f'https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live'
     game_info = json.loads(requests.get(game_feed_url, timeout=200).content)
     with open("game_info_for_find_event.json", "w+") as f:
         json.dump(game_info, f)
     timestamp_to_find = '2024-02-22T20:15:09.578Z'
-
     event = find_event_by_timestamp(game_info, timestamp_to_find)
 
     with open("event_found.json", "w+") as f:
@@ -119,7 +114,6 @@ def get_game_info(game_pk, db):
     team = find_team_by_player_id(db, player_id)
     print(team)
     return event, team
-
 
 # Example usage
 if __name__ == "__main__":

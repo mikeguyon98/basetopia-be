@@ -24,7 +24,6 @@ def combine_videos(video_urls, output_filename='combined_video.mp4'):
     # Create temp directory if it doesn't exist
     if not os.path.exists('temp'):
         os.makedirs('temp')
-
     # Download all videos
     video_files = []
     for i, url in enumerate(video_urls):
@@ -45,12 +44,10 @@ def combine_videos(video_urls, output_filename='combined_video.mp4'):
     final_clip.close()
     for clip in clips:
         clip.close()
-
     # Remove temporary files
     for file in video_files:
         os.remove(file)
     os.rmdir('temp')
-
 
 # Example usage
 if __name__ == "__main__":
