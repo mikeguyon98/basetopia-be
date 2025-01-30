@@ -6,7 +6,7 @@ def get_highlights(game_id):
     url = f"https://statsapi.mlb.com/api/v1/game/{game_id}/content"
     data = None
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=500)
         print(response)
         response.raise_for_status()
         data = response.json()

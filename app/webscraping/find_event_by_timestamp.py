@@ -114,7 +114,8 @@ def find_event_by_timestamp(data, target_timestamp):
     :return: The event dictionary if found, else None.
     """
     # Convert target timestamp to datetime object for comparison
-    target_time = datetime.fromisoformat(target_timestamp.replace('Z', '+00:00'))
+    target_time = datetime.fromisoformat(
+        target_timestamp.replace('Z', '+00:00'))
 
     all_plays = data.get('liveData', {}).get('plays', {}).get('allPlays', [])
 
@@ -125,8 +126,10 @@ def find_event_by_timestamp(data, target_timestamp):
 
         if start_timestamp and end_timestamp:
             # Convert start and end timestamps to datetime objects
-            start_time = datetime.fromisoformat(start_timestamp.replace('Z', '+00:00'))
-            end_time = datetime.fromisoformat(end_timestamp.replace('Z', '+00:00'))
+            start_time = datetime.fromisoformat(
+                start_timestamp.replace('Z', '+00:00'))
+            end_time = datetime.fromisoformat(
+                end_timestamp.replace('Z', '+00:00'))
 
             # Check if target_time is within the interval [start_time, end_time]
             buffer = timedelta(seconds=1)  # Add a 1-second buffer

@@ -1,9 +1,10 @@
 [tool.poetry]
 name = "basetopia-be"
 version = "0.1.0"
-description = ""
+description = "Baseball Statistics and Analysis API"
 authors = ["Michael Guyon <mikeguyon98@gmail.com>"]
 readme = "README.md"
+packages = [{include = "basetopia_be"}] 
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.13"
@@ -34,8 +35,16 @@ langchain-core = "^0.3.33"
 langchain-openai = "^0.3.3"
 langchain-community = "^0.3.16"
 langgraph = "^0.2.68"
+pydantic-settings = "^2.0.0" 
+google-cloud-translate = "^3.19.0"
 
+[tool.poetry.scripts]
+start = "main:app" 
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]  
+testpaths = ["tests"]
+python_files = ["test_*.py"]

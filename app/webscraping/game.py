@@ -1,24 +1,26 @@
 import json
 import requests
 
+
 def get_game_summary(game_pk):
     """
     Gets a summary of key information for a specific game, including top performers.
-    
+
     Args:
         game_pk: The unique identifier for the game
-        
+
     Returns:
         Dictionary containing game summary information
     """
     # Get game feed data
-    game_feed_url = f'https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live'
+    game_feed_url = f'https://statsapi.mlb.com/api/v1.1/game/{
+        game_pk}/feed/live'
     game_info = json.loads(requests.get(game_feed_url).content)
-    
+
     # Extract key information
     game_data = game_info['gameData']
     live_data = game_info['liveData']
-    
+
     # Build summary dictionary
     summary = {
         'Date': game_data['datetime']['officialDate'],
@@ -33,7 +35,7 @@ def get_game_summary(game_pk):
         'Save': None,
         'Top Performers': []
     }
-    
+
     # Add pitcher decisions if game is complete
     if game_data['status']['statusCode'] in ('F', 'FT', 'FR'):
         decisions = live_data['decisions']
@@ -43,13 +45,14 @@ def get_game_summary(game_pk):
             summary['Losing Pitcher'] = decisions['loser']['fullName']
         if 'save' in decisions:
             summary['Save'] = decisions['save']['fullName']
-    
+
     # Add top performers
     if 'topPerformers' in live_data['boxscore']:
         for performer in live_data['boxscore']['topPerformers']:
             player = performer['player']
-            stats = player['stats'].get('batting', {}) or player['stats'].get('pitching', {})
-            
+            stats = player['stats'].get(
+                'batting', {}) or player['stats'].get('pitching', {})
+
             # Create performer summary
             perf_summary = {
                 'Name': player['person']['fullName'],
@@ -59,7 +62,7 @@ def get_game_summary(game_pk):
                 'Game Score': performer.get('gameScore', 'N/A')
             }
             summary['Top Performers'].append(perf_summary)
-            
+
     return summary
 
 # # Example usage:
