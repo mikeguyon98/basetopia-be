@@ -1,5 +1,5 @@
 from langchain_core.tools import tool
-from basetopia_be.ml.vector_db import get_vector_store
+from app.ml.vector_db import get_vector_store
 from typing import List, Dict
 from google.cloud import firestore
 

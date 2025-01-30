@@ -2,12 +2,12 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
-from basetopia_be.ml.highlight_tool import (
+from app.ml.highlight_tool import (
     get_highlight_docs,
     get_team_highlights,
     is_valid_team,
 )
-from basetopia_be.ml.output_schema import AgentResponse
+from app.ml.output_schema import AgentResponse
 from langgraph.graph import MessagesState
 from dotenv import load_dotenv
 
