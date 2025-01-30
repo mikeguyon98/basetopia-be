@@ -34,7 +34,8 @@ def find_event_by_timestamp(data, target_timestamp):
     :return: The event dictionary if found, else None.
     """
     # Convert target timestamp to datetime object for comparison
-    target_time = datetime.fromisoformat(target_timestamp.replace('Z', '+00:00'))
+    target_time = datetime.fromisoformat(
+        target_timestamp.replace('Z', '+00:00'))
 
     # Navigate to the list of all plays/events
     all_plays = data.get('liveData', {}).get('plays', {}).get('allPlays', [])
@@ -46,8 +47,10 @@ def find_event_by_timestamp(data, target_timestamp):
 
         if start_timestamp and end_timestamp:
             # Convert start and end timestamps to datetime objects
-            start_time = datetime.fromisoformat(start_timestamp.replace('Z', '+00:00'))
-            end_time = datetime.fromisoformat(end_timestamp.replace('Z', '+00:00'))
+            start_time = datetime.fromisoformat(
+                start_timestamp.replace('Z', '+00:00'))
+            end_time = datetime.fromisoformat(
+                end_timestamp.replace('Z', '+00:00'))
 
             # Check if target_time is within the interval [start_time, end_time]
             if start_time <= target_time <= end_time:
@@ -65,20 +68,22 @@ def find_team_by_player_id(db, mlb_person_id):
     """
     try:
         players_ref = db.collection('players')
-        query = players_ref.where('mlb_person_id', '==', mlb_person_id).stream()
-        
+        query = players_ref.where(
+            'mlb_person_id', '==', mlb_person_id).stream()
+
         for player in query:
             player_data = player.to_dict()
             team_id = player_data.get('team_id')
             team_mlb_id = player_data.get('team_mlb_id')
-            
+
             if team_id and team_mlb_id:
                 teams_ref = db.collection('teams')
-                team_query = teams_ref.where('mlb_id', '==', team_mlb_id).stream()
-                
+                team_query = teams_ref.where(
+                    'mlb_id', '==', team_mlb_id).stream()
+
                 for team in team_query:
                     return team.to_dict()
-        
+
         print("Team not found for the given player ID.")
         return None
     except Exception as e:
@@ -92,7 +97,6 @@ def get_game_info(game_pk, db):
     with open("game_info_for_find_event.json", "w+") as f:
         json.dump(game_info, f)
     timestamp_to_find = '2024-02-22T20:15:09.578Z'
-    
     event = find_event_by_timestamp(game_info, timestamp_to_find)
 
     with open("event_found.json", "w+") as f:
@@ -101,7 +105,8 @@ def get_game_info(game_pk, db):
     eventType = event.get('result', {}).get('eventType')
     player_role = EVENT_TO_PLAYER_ROLE.get(eventType)
     player_id = event.get('matchup', {}).get(player_role, {}).get('id')
-    player_info = requests.get(f'https://statsapi.mlb.com/api/v1/people/{player_id}').content
+    player_info = requests.get(
+        f'https://statsapi.mlb.com/api/v1/people/{player_id}').content
     player_info = json.loads(player_info)
     with open("player_info.json", "w+") as f:
         json.dump(player_info, f)
@@ -118,9 +123,7 @@ if __name__ == "__main__":
         db = firestore.Client()
     except Exception as e:
         print(f"Error loading Firestore client: {str(e)}")
-    if db:  
+    if db:
         event, team = get_game_info(748266, db)
     else:
         print("No Firestore client found")
-    
-    
