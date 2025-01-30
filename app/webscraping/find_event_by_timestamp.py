@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 import requests
 from google.cloud import firestore
 from dotenv import load_dotenv
-from highlights import get_highlights
-from players import process_player_data
+from app.webscraping.highlights import get_highlights
+from app.webscraping.players import process_player_data
 import pandas as pd
 import os
 
