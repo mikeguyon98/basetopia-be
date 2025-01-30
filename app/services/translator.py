@@ -2,7 +2,9 @@ import os
 from typing import List, Optional
 from google.cloud import translate_v3beta1 as translate
 from google.oauth2 import service_account
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class VertexAITranslation:
     def __init__(
@@ -12,6 +14,7 @@ class VertexAITranslation:
         credentials_path: Optional[str] = None
     ):
         # Determine project ID
+        print(os.getenv('GOOGLE_CLOUD_PROJECT'))
         self.project_id = project_id or os.getenv('GOOGLE_CLOUD_PROJECT')
         if not self.project_id:
             raise ValueError(
@@ -19,7 +22,7 @@ class VertexAITranslation:
 
         # Determine credentials path
         credentials_path = credentials_path or os.getenv(
-            'GOOGLE_APPLICATION_CREDENTIALS')
+            'FIREBASE_CREDENTIALS_PATH')
 
         # Load credentials
         try:
@@ -59,8 +62,22 @@ class VertexAITranslation:
         chunks.append(text)
         return chunks
 
-    def translate_text(self, text: str, target_language: str) -> str:
-        """Translate text with error handling and chunk support"""
+    def translate_text(
+        self,
+        text: str,
+        target_language: str,
+        source_language: Optional[str] = None
+    ) -> str:
+        """Translate text with error handling and chunk support.
+
+        Args:
+            text (str): The text to translate.
+            target_language (str): The language code to translate the text into.
+            source_language (Optional[str]): The language code of the input text.
+
+        Returns:
+            str: The translated text.
+        """
         self._validate_input(text, target_language)
 
         text_chunks = self._split_text(text)
@@ -68,22 +85,27 @@ class VertexAITranslation:
 
         for chunk in text_chunks:
             try:
+                request_payload = {
+                    "parent": self.parent,
+                    "contents": [chunk],
+                    "target_language_code": target_language,
+                    "mime_type": "text/plain",
+                }
+                if source_language:
+                    request_payload["source_language_code"] = source_language
+
                 response = self.client.translate_text(
-                    request={
-                        "parent": self.parent,
-                        "contents": [chunk],
-                        "target_language_code": target_language,
-                        "mime_type": "text/plain",
-                    }
+                    request=request_payload
                 )
                 translated_chunks.append(
-                    response.translations[0].translated_text)
+                    response.translations[0].translated_text
+                )
             except Exception as e:
                 print(f"Translation chunk error: {e}")
                 raise
 
         return " ".join(translated_chunks)
-
+    
     def translate_dict(
         self,
         data: dict,

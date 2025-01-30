@@ -10,6 +10,7 @@ import os
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from app.services.firebase_service import FirebaseService
+from app.ml.endpoints import router as ml_router 
 cloud_id = os.getenv("FIREBASE_PROJECT_ID", "basetopia-b9302")
 
 router = APIRouter()
@@ -44,6 +45,7 @@ class UserResponse(UserBase):
 class TranslationRequest(BaseModel):
     content: str
     target_language: str
+    input_language: Optional[str] = None
 
 
 class TranslationDictRequest(BaseModel):
@@ -56,10 +58,11 @@ class TranslationDictRequest(BaseModel):
 async def translate_text(request: TranslationRequest):
     """
     Translate a single block of text to the target language.
+    valid language inputs: en, es, ja
     """
     try:
         translated_text = translation_service.translate_text(
-            request.content, request.target_language
+            request.content, request.target_language, request.source_language
         )
         return {"translated_text": translated_text}
     except Exception as e:
@@ -234,3 +237,5 @@ async def unfollow_player(
         players.remove(player_id)
         return await firebase_service.update_user(uid, {"players_following": players})
     return user_data
+
+router.include_router(ml_router)
