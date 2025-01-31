@@ -112,7 +112,8 @@ def run_agent(user_query: str) -> dict:
 # Example usage
 if __name__ == "__main__":
     load_dotenv()
-    user_query = "Show me the latest highlights for the LA Angels"
+    # user_query = "Show me the latest highlights for the LA Angels"
+    user_query = "I would like to see Kyle Hendricks highlights"
     response = run_agent(user_query)
     print("RESPONSE: \n\n\n")
     print(response)
