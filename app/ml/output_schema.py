@@ -16,3 +16,6 @@ class AgentResponse(BaseModel):
         description="List of highlights, each with a video URL and description"
     )
     content: str = Field(..., description="Content text in Markdown format")
+class TagResponse(BaseModel):
+    player_tags: List[str] = Field(..., description="List of player ids")
+    team_tags: List[str] = Field(..., description="List of team ids")

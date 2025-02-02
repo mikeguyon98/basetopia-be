@@ -1,5 +1,6 @@
 from langchain_core.tools import tool
-from app.ml.vector_db import get_vector_store
+from app.ml.vector_db import get_vector_store, get_players_vector_store
+
 from typing import List, Dict
 from google.cloud import firestore
 
@@ -50,6 +51,29 @@ def get_team_names() -> List[str]:
     return [doc.to_dict()["mlb_shortName"] for doc in team_ref.stream()]
 
 @tool
+def get_team_id(team_name: str) -> str:
+    """Returns the id of a team."""
+    db = firestore.Client()
+    team_ref = db.collection("teams")
+    return [doc.to_dict()["id"] for doc in team_ref.stream() if doc.to_dict()["mlb_shortName"] == team_name][0]
+
+@tool
+def get_player_id(player_name: str) -> str:
+    """Returns the id of a player."""
+    db = firestore.Client()
+    player_ref = db.collection("players")
+    return [doc.to_dict()["id"] for doc in player_ref.stream() if doc.to_dict()["name"] == player_name][0]
+
+@tool
+def is_valid_player(player_name: str) -> bool:
+    """Checks if a player name is valid."""
+    print("Running is_valid_player tool")
+    if player_name in get_player_names():
+        return True
+    else:
+        return False
+
+@tool
 def is_valid_team(team_name: str) -> bool:
     """Checks if a team name is valid."""
     print("Running is_valid_team tool")
@@ -57,6 +81,14 @@ def is_valid_team(team_name: str) -> bool:
         return True
     else:
         return False
+    
+@tool
+def get_similar_players(player_name: str) -> List[str]:
+    """Returns a list of similar players to the given player name."""
+    vector_store = get_players_vector_store()
+    docs = vector_store.similarity_search(player_name, k=5)
+    return [doc.metadata.get("player_name") for doc in docs]
+
 
 # def get_model():
 #     return ChatOpenAI(model="gpt-4o-mini", temperature=0)
