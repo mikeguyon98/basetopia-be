@@ -45,7 +45,7 @@ class FirebaseService:
         return {"message": "User deleted successfully"}
 
     # ### New Methods Added Below ###
-    async def save_highlight_post(self, highlight_data: dict) -> str:
+    async def save_highlight_post(self, highlight_data: dict, user_email: str) -> str:
         """
         Save a highlight post to the 'posts' collection in Firebase with an autoincrementing ID.
 
@@ -69,7 +69,11 @@ class FirebaseService:
             # Get the new counter value
             counter_snapshot = counter_doc_ref.get()
             new_counter_value = counter_snapshot.get('count')
-
+            if highlight_data.get("player_tags") is None:
+                highlight_data["player_tags"] = []
+            if highlight_data.get("team_tags") is None:
+                highlight_data["team_tags"] = []
+            highlight_data["user_email"] = user_email
             # Set the new post with the autoincremented ID
             post_id = str(new_counter_value)
             post_doc_ref = self.posts_collection.document(post_id)
@@ -128,5 +132,21 @@ class FirebaseService:
             }
 
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Failed to retrieve highlights: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve highlights: {str(e)}")
+        
+    async def get_post_by_id(self, post_id: str):
+        doc_ref = self.posts_collection.document(post_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail="Post not found")
+        return doc.to_dict()
+    
+    async def get_posts_by_player_tag(self, tag: str):
+        query = self.posts_collection.where('player_tags', 'array_contains', tag)
+        docs = query.stream()
+        return [doc.to_dict() for doc in docs]
+    
+    async def get_posts_by_team_tag(self, tag: str):
+        query = self.posts_collection.where('team_tags', 'array_contains', tag)
+        docs = query.stream()
+        return [doc.to_dict() for doc in docs]
