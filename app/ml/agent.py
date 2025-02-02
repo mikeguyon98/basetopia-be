@@ -1,118 +1,103 @@
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
-from langchain_core.messages import HumanMessage
+from dotenv import load_dotenv
+from langgraph.graph import StateGraph, END, MessagesState
+from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
 from app.ml.highlight_tool import (
     get_highlight_docs,
     get_team_highlights,
     is_valid_team,
+    get_team_names
 )
 from app.ml.output_schema import AgentResponse
-from langgraph.graph import MessagesState
-from dotenv import load_dotenv
 
 load_dotenv()
-# Define the agent's state
+
+# Define our agent state.
+# In this case our state will have the conversation history under "messages"
+# and the final structured output under "structured_response".
 class AgentState(MessagesState):
-    # Final structured response from the agent
-    final_response: AgentResponse
+    structured_response: AgentResponse
 
-# Initialize the base model
-base_model = ChatOpenAI(model="gpt-4o")  # Replace 'gpt-4' with your model
+# Initialize our base model.
+base_model = ChatOpenAI(model="gpt-4o")  # Replace 'gpt-4o' with your model identifier
 
-# Define tools
-tools = [get_highlight_docs, get_team_highlights, is_valid_team]
+prompt = '''You are a helpful assistant with several tools at your disposal.
+You can use the following tools to help you with your task:
+- get_highlight_docs: This tool allows you to get highlights for a specific team.
+- get_team_highlights: This tool allows you to get highlights for a specific team.
+- is_valid_team: This tool allows you to check if a team is valid.
+- get_team_names: This tool allows you to get a list of valid team names.
 
-# Initialize the models
-# Model for reasoning and tool calling
-model_with_tools = base_model.bind_tools(tools)
+If a user is asking about highlights in general or player highlights use the get_highlight_docs tool.
+If a user would like team highlights, first see what the list of teams are using the get_team_names tool.
+Then find whichever team name is most similar and verify it is a valid team using the is_valid_team tool.
+Then use the get_team_highlights tool to get the highlights for that team.
+If at any point you encounter an error, default to the get_highlight_docs tool.
+'''
 
-# Model for structured output
-model_with_structured_output = base_model.with_structured_output(AgentResponse)
+# Define our tools.
+tools = [get_highlight_docs, get_team_highlights, is_valid_team, get_team_names]
 
-# Define graph node functions
-def call_model(state: AgentState) -> dict:
-    response = model_with_tools.invoke(state["messages"])
-    return {"messages": [response]}
+# Create the ReAct agent with structured output.
+# Here, response_format is set to AgentResponse so that a second LLM call will produce
+# a structured response conforming to that schema.
+graph_agent = create_react_agent(
+    model=base_model,
+    tools=tools,
+    prompt=prompt,
+    response_format=AgentResponse,
+)
 
-def respond(state: AgentState) -> dict:
-    # Use the model with structured output on the last tool's output
-    # Find the last ToolMessage content
-    last_tool_message_content = None
-    for message in reversed(state["messages"]):
-        if message.type == "tool":
-            last_tool_message_content = message.content
-            break
-
-    if last_tool_message_content is None:
-        raise ValueError("No ToolMessage found in the messages.")
-
-    # Use the content of the last ToolMessage as input
-    response = model_with_structured_output.invoke(
-        [HumanMessage(content=last_tool_message_content)]
-    )
-    return {"final_response": response}
-
-def should_continue(state: AgentState) -> str:
-    last_message = state["messages"][-1]
-    if last_message.tool_calls:
-        return "tools"
-    else:
-        return "respond"
+def call_agent(state: AgentState) -> dict:
+    """
+    This node calls our prebuilt ReAct agent.
+    
+    We pass a dict with the key "messages" containing our conversation history.
+    The ReAct agent returns a dict containing both an updated conversation history
+    and a final structured output in the key "structured_response".
+    """
+    inputs = {"messages": state["messages"]}
+    result = graph_agent.invoke(inputs)
+    return result
 
 def build_graph():
+    """
+    Build a minimal graph with a single node that calls our ReAct agent.
+    """
     workflow = StateGraph(AgentState)
-
-    # Add nodes
-    workflow.add_node("agent", call_model)
-    workflow.add_node("respond", respond)
-    workflow.add_node("tools", ToolNode(tools))
-
-    # Set entry point
+    # Add the node that calls our agent.
+    workflow.add_node("agent", call_agent)
+    # Set the entrypoint for the graph.
     workflow.set_entry_point("agent")
+    # Connect our "agent" node to the END.
+    workflow.add_edge("agent", END)
+    compiled = workflow.compile()
+    return compiled
 
-    # Add edges
-    workflow.add_conditional_edges(
-        "agent",
-        should_continue,
-        {
-            "tools": "tools",
-            "respond": "respond",
-        },
-    )
-    workflow.add_edge("tools", "agent")
-    workflow.add_edge("respond", END)
-
-    # Compile the graph
-    highlight_agent = workflow.compile()
-    return highlight_agent
-
-# Function to run the agent
 def run_agent(user_query: str) -> dict:
-    # Initialize messages
+    """
+    Start with a conversation containing a single user message (as a tuple).
+    Then invoke the workflow, and return the final structured output.
+    """
+    # Per the guide, we pass messages as a list of (role, text) tuples.
     messages = [("user", user_query)]
+    state = {"messages": messages}
 
-    # Invoke the agent
     try:
-        highlight_agent = build_graph()
-        result = highlight_agent.invoke({"messages": messages})
-
-        # Get the final structured response
-        structured_response = result["final_response"]
-
-        # Convert to dictionary
-        response_dict = structured_response.model_dump()
-
-        return response_dict
+        graph_wf = build_graph()
+        result = graph_wf.invoke(state)
+        # The ReAct agent returns our structured output under "structured_response"
+        final_output = result.get("structured_response")
+        # If AgentResponse is a Pydantic model, dump to a dictionary.
+        if hasattr(final_output, "model_dump"):
+            return final_output.model_dump()
+        return final_output
     except Exception as e:
-        # Handle exceptions (e.g., validation errors)
-        print(f"Error: {e}")
+        print("Error:", e)
         return {"error": str(e)}
 
-# Example usage
 if __name__ == "__main__":
-    load_dotenv()
-    user_query = "Show me the latest highlights for the LA Angels"
+    user_query = "I would like to see LA Angels highlights"
     response = run_agent(user_query)
-    print("RESPONSE: \n\n\n")
+    print("RESPONSE:\n")
     print(response)

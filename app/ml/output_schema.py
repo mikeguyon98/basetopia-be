@@ -15,7 +15,4 @@ class AgentResponse(BaseModel):
         default_factory=list,
         description="List of highlights, each with a video URL and description"
     )
-    content: List[ContentItem] = Field(
-        default_factory=list,
-        description="List of content items, each with a subtitle and content"
-    )
+    content: str = Field(..., description="Content text in Markdown format")
