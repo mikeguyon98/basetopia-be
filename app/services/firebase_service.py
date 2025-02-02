@@ -1,7 +1,7 @@
 from firebase_admin import firestore
 from fastapi import HTTPException
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 
 class FirebaseService:
@@ -130,3 +130,56 @@ class FirebaseService:
         except Exception as e:
             raise HTTPException(
                 status_code=500, detail=f"Failed to retrieve highlights: {str(e)}")
+
+    async def get_user_posts(self, user_id: str, page_size: int, last_cursor: Optional[dict] = None):
+        query = self.db.collection('posts').where('user_email', '==', user_id)
+        return await self._paginate_posts(query, page_size, last_cursor)
+
+    async def get_team_posts(self, team_ids: List[str], page_size: int, last_cursor: Optional[dict] = None):
+        query = self.db.collection('posts').where(
+            'team_tags', 'array_contains_any', team_ids)
+        return await self._paginate_posts(query, page_size, last_cursor)
+
+    async def get_player_posts(self, player_ids: List[str], page_size: int, last_cursor: Optional[dict] = None):
+        query = self.db.collection('posts').where(
+            'player_tags', 'array_contains_any', player_ids)
+        return await self._paginate_posts(query, page_size, last_cursor)
+
+    async def _paginate_posts(self, query, page_size: int, last_cursor: Optional[dict] = None):
+        # Add ordering to query
+        query = query.order_by(
+            'created_at', direction=firestore.Query.DESCENDING)
+
+        # Apply cursor if provided
+        if last_cursor:
+            query = query.start_after({
+                'created_at': last_cursor['created_at'],
+                'id': last_cursor['id']
+            })
+
+        # Fetch one extra document to determine if there are more results
+        docs = query.limit(page_size + 1).stream()
+
+        # Convert to list to handle pagination
+        results = []
+        for doc in docs:
+            results.append({**doc.to_dict(), 'id': doc.id})
+
+        # Determine if there are more results and remove the extra document
+        has_more = len(results) > page_size
+        if has_more:
+            results.pop()
+
+        # Create the next cursor if there are more results
+        next_cursor = None
+        if has_more and results:
+            last_doc = results[-1]
+            next_cursor = {
+                'created_at': last_doc['created_at'],
+                'id': last_doc['id']
+            }
+
+        return {
+            "data": results,
+            "next_page_cursor": next_cursor
+        }

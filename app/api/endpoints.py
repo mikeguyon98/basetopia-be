@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Annotated, Optional
@@ -10,7 +11,7 @@ import os
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from app.services.firebase_service import FirebaseService
-from app.ml.endpoints import router as ml_router
+from app.ml.endpoints import FinalResponse, NextPageCursor, router as ml_router
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 from typing import List, Dict
@@ -64,6 +65,162 @@ class TranslationDictRequest(BaseModel):
     data: dict
     target_language: str
     fields_to_translate: list
+
+
+class PostsResponse(BaseModel):
+    posts: List[FinalResponse]
+    next_page_cursor: Optional[NextPageCursor]
+    page_size: int
+
+
+async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        decoded_token = auth.verify_id_token(credentials.credentials)
+        return decoded_token
+    except auth.ExpiredIdTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired"
+        )
+    except auth.RevokedIdTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been revoked"
+        )
+    except auth.InvalidIdTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Authentication failed: {str(e)}"
+        )
+
+
+@router.get("/posts/me", response_model=PostsResponse)
+async def get_user_posts(
+    token_data: dict = Depends(verify_firebase_token),
+    page_size: int = Query(10, ge=1, le=100),
+    last_created_at: Optional[str] = Query(None),
+    last_id: Optional[str] = Query(None)
+):
+    """Get posts created by the current user"""
+    try:
+        uid = token_data["uid"]
+
+        last_cursor = None
+        if last_created_at and last_id:
+            last_cursor = {
+                'created_at': datetime.fromisoformat(last_created_at),
+                'id': last_id
+            }
+
+        results = await firebase_service.get_user_posts(
+            user_id=uid,
+            page_size=page_size,
+            last_cursor=last_cursor
+        )
+
+        next_page_cursor = None
+        if results["next_page_cursor"]:
+            next_page_cursor = {
+                'created_at': results["next_page_cursor"]['created_at'].isoformat(),
+                'id': results["next_page_cursor"]['id']
+            }
+
+        return PostsResponse(
+            posts=results["data"],
+            next_page_cursor=next_page_cursor,
+            page_size=page_size
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/posts/following/teams", response_model=PostsResponse)
+async def get_team_posts(
+    token_data: dict = Depends(verify_firebase_token),
+    page_size: int = Query(10, ge=1, le=100),
+    last_created_at: Optional[str] = Query(None),
+    last_id: Optional[str] = Query(None)
+):
+    """Get posts for teams the user follows"""
+    try:
+        uid = token_data["uid"]
+        user_data = await firebase_service.get_user(uid)
+        teams_following = user_data["teams_following"]
+
+        last_cursor = None
+        if last_created_at and last_id:
+            last_cursor = {
+                'created_at': datetime.fromisoformat(last_created_at),
+                'id': last_id
+            }
+
+        results = await firebase_service.get_team_posts(
+            team_ids=teams_following,
+            page_size=page_size,
+            last_cursor=last_cursor
+        )
+
+        next_page_cursor = None
+        if results["next_page_cursor"]:
+            next_page_cursor = {
+                'created_at': results["next_page_cursor"]['created_at'].isoformat(),
+                'id': results["next_page_cursor"]['id']
+            }
+
+        return PostsResponse(
+            posts=results["data"],
+            next_page_cursor=next_page_cursor,
+            page_size=page_size
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/posts/following/players", response_model=PostsResponse)
+async def get_player_posts(
+    token_data: dict = Depends(verify_firebase_token),
+    page_size: int = Query(10, ge=1, le=100),
+    last_created_at: Optional[str] = Query(None),
+    last_id: Optional[str] = Query(None)
+):
+    """Get posts for players the user follows"""
+    try:
+        uid = token_data["uid"]
+        user_data = await firebase_service.get_user(uid)
+        players_following = user_data["players_following"]
+
+        last_cursor = None
+        if last_created_at and last_id:
+            last_cursor = {
+                'created_at': datetime.fromisoformat(last_created_at),
+                'id': last_id
+            }
+
+        results = await firebase_service.get_player_posts(
+            player_ids=players_following,
+            page_size=page_size,
+            last_cursor=last_cursor
+        )
+
+        next_page_cursor = None
+        if results["next_page_cursor"]:
+            next_page_cursor = {
+                'created_at': results["next_page_cursor"]['created_at'].isoformat(),
+                'id': results["next_page_cursor"]['id']
+            }
+
+        return PostsResponse(
+            posts=results["data"],
+            next_page_cursor=next_page_cursor,
+            page_size=page_size
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/search")
@@ -198,32 +355,6 @@ async def translate_dict(request: TranslationDictRequest):
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Translation failed: {str(e)}"
-        )
-
-
-async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        decoded_token = auth.verify_id_token(credentials.credentials)
-        return decoded_token
-    except auth.ExpiredIdTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired"
-        )
-    except auth.RevokedIdTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Token has been revoked"
-        )
-    except auth.InvalidIdTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Authentication failed: {str(e)}"
         )
 
 
