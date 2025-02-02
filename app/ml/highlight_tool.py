@@ -42,7 +42,7 @@ def get_team_highlights(team_name: str, k: int = 5) -> List[Dict]:
         })
     return highlights
 
-
+@tool
 def get_team_names() -> List[str]:
     """Returns a list of MLB team names."""
     db = firestore.Client()
@@ -54,10 +54,9 @@ def is_valid_team(team_name: str) -> bool:
     """Checks if a team name is valid."""
     print("Running is_valid_team tool")
     if team_name in get_team_names():
-        return team_name
+        return True
     else:
-        valid_team_names = get_team_names()
-        return "Invalid team name. Valid team names are: " + ", ".join(valid_team_names)
+        return False
 
 # def get_model():
 #     return ChatOpenAI(model="gpt-4o-mini", temperature=0)
