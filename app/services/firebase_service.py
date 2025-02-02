@@ -1,11 +1,15 @@
 from firebase_admin import firestore
 from fastapi import HTTPException
+from datetime import datetime
+from typing import Optional
 
 
 class FirebaseService:
     def __init__(self):
         self.db = firestore.client()
         self.users_collection = self.db.collection('users')
+        self.highlights_collection = self.db.collection('highlights')
+        self.posts_collection = self.db.collection('posts')
 
     async def get_user(self, uid: str):
         doc_ref = self.users_collection.document(uid)
@@ -40,49 +44,89 @@ class FirebaseService:
         doc_ref.delete()
         return {"message": "User deleted successfully"}
 
-    async def get_searchable_players(self):
+    # ### New Methods Added Below ###
+    async def save_highlight_post(self, highlight_data: dict) -> str:
+        """
+        Save a highlight post to the 'posts' collection in Firebase with an autoincrementing ID.
+
+        Args:
+            highlight_data (dict): The highlight data to be saved.
+
+        Returns:
+            str: The autoincremented document ID.
+        """
         try:
-            players_ref = self.db.collection('players')
-            docs = players_ref.stream()
+            from firebase_admin import firestore
 
-            return [{
-                "id": doc.get("id"),
-                "name": doc.get("mlb_person_fullName"),
-                "metadata": {
-                    "jersey_number": doc.get("mlb_jerseyNumber"),
-                    "position": {
-                        "name": doc.get("mlb_position_name"),
-                        "abbreviation": doc.get("mlb_position_abbreviation"),
-                        "type": doc.get("mlb_position_type")
-                    },
-                    "status": doc.get("mlb_status_description"),
-                    "mlb_id": doc.get("mlb_person_id"),
-                    "team_id": doc.get("team_id")
-                }
-            } for doc in docs]
+            highlight_data['created_at'] = datetime.now()
+
+            # Reference to the counter document
+            counter_doc_ref = self.db.collection('counters').document('posts')
+
+            # Atomically increment the counter
+            counter_doc_ref.update({'count': firestore.Increment(1)})
+
+            # Get the new counter value
+            counter_snapshot = counter_doc_ref.get()
+            new_counter_value = counter_snapshot.get('count')
+
+            # Set the new post with the autoincremented ID
+            post_id = str(new_counter_value)
+            post_doc_ref = self.posts_collection.document(post_id)
+            post_doc_ref.set(highlight_data)
+
+            return post_id
+
         except Exception as e:
-            raise Exception(f"Failed to get players: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to save highlight: {str(e)}")
 
-    async def get_searchable_teams(self):
+    async def get_paginated_highlights(self, page_size: int, last_cursor: Optional[dict] = None) -> dict:
+        """
+        Retrieve paginated highlights using cursor-based pagination.
+
+        Args:
+            page_size (int): Number of items per page.
+            last_cursor (Optional[dict]): Dictionary containing 'id' of the last item from the previous page.
+
+        Returns:
+            dict: Contains 'data' and 'next_page_cursor'.
+        """
         try:
-            teams_ref = self.db.collection('teams')
-            docs = teams_ref.stream()
+            # Order the posts by 'id' in ascending order (since IDs are autoincremented)
+            query = self.posts_collection.order_by(
+                'id', direction=firestore.Query.ASCENDING)
 
-            return [{
-                "id": doc.get("id"),
-                "name": doc.get("mlb_name"),
-                "metadata": {
-                    "location": doc.get("mlb_locationName"),
-                    "short_name": doc.get("mlb_shortName"),
-                    "team_name": doc.get("mlb_teamName"),
-                    "abbreviation": doc.get("mlb_abbreviation"),
-                    "mlb_id": doc.get("mlb_id"),
-                    "season": doc.get("mlb_season"),
-                    "spring_league": {
-                        "name": doc.get("mlb_springLeague_name"),
-                        "abbreviation": doc.get("mlb_springLeague_abbreviation")
-                    }
+            # If a cursor is provided, start after it
+            if last_cursor:
+                last_id = last_cursor['id']
+                query = query.start_after({'id': last_id})
+
+            # Limit the results to the page size
+            query = query.limit(page_size)
+
+            # Fetch the documents for the current page
+            docs = query.stream()
+            data = []
+            for doc in docs:
+                doc_data = doc.to_dict()
+                doc_data['id'] = doc.id  # Include the ID in the data
+                data.append(doc_data)
+
+            # Get the 'id' of the last document for the next page cursor
+            if data:
+                last_doc = data[-1]
+                next_page_cursor = {
+                    'id': last_doc['id']
                 }
-            } for doc in docs]
+            else:
+                next_page_cursor = None
+
+            return {
+                "data": data,
+                "next_page_cursor": next_page_cursor
+            }
+
         except Exception as e:
-            raise Exception(f"Failed to get teams: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to retrieve highlights: {str(e)}")
