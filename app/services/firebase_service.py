@@ -11,6 +11,8 @@ class FirebaseService:
         self.highlights_collection = self.db.collection('highlights')
         self.posts_collection = self.db.collection('posts')
         self.docs_collection = self.db.collection('docs')
+        self.players_collection = self.db.collection('players')
+        self.teams_collection = self.db.collection('teams')
 
     async def get_user(self, uid: str):
         doc_ref = self.users_collection.document(uid)
@@ -174,3 +176,49 @@ class FirebaseService:
         query = self.posts_collection.where('team_tags', 'array_contains', tag)
         docs = query.stream()
         return [doc.to_dict() for doc in docs]
+    
+    
+    async def search_posts(self, query: str):
+        query_lower = query.lower()
+
+        #########################
+        # Teams and players via local filtering
+        #########################
+
+        # 1. Get *all* team documents (since there are only 30 MLB teams).
+        teams_docs = list(self.teams_collection.stream())
+
+        # 2. Filter them in Python by checking if the query is in either mlb_name or mlb_locationName
+        matched_teams = []
+        for doc in teams_docs:
+            team_data = doc.to_dict()
+            # Make sure you gracefully handle missing fields if needed
+            name = team_data.get("mlb_name", "").lower()
+            location = team_data.get("mlb_locationName", "").lower()
+            if query_lower in name or query_lower in location:
+                matched_teams.append(team_data)
+
+        # 3. Get *all* player documents
+        players_docs = list(self.players_collection.stream())
+
+        # 4. Filter them similarly
+        matched_players = []
+        for doc in players_docs:
+            player_data = doc.to_dict()
+            full_name = player_data.get("mlb_person_fullName", "").lower()
+            if query_lower in full_name:
+                matched_players.append(player_data)
+
+        #########################
+        # If you still want posts by prefix-search, keep your old approach:
+        #########################
+
+        posts_query = self.posts_collection.order_by('title') \
+            .start_at([query_lower]).end_at([query_lower + '\uf8ff'])
+        posts_docs = list(posts_query.stream())
+
+        return {
+            "players": matched_players,
+            "teams": matched_teams,
+            "posts": [doc.to_dict() for doc in posts_docs],
+        }
