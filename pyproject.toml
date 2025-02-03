@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "basetopia-be"
+name = "app"
 version = "0.1.0"
 description = "Baseball Statistics and Analysis API"
 authors = ["Michael Guyon <mikeguyon98@gmail.com>"]
 readme = "README.md"
-packages = [{include = "basetopia_be"}] 
+packages = [{include = "app"}] 
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.12,<3.13"
 fastapi = "^0.115.6"
 uvicorn = "^0.34.0"
 google-auth = "^2.37.0"
@@ -21,8 +21,25 @@ pytest = "^8.3.4"
 beautifulsoup4 = "^4.12.3"
 pytz = "^2024.2"
 python-dateutil = "^2.9.0.post0"
+moviepy = "^2.1.2"
+google-generativeai = "^0.8.3"
+google-genai = "^0.5.0"
+pandas = "^2.2.3"
+google-cloud-discoveryengine = "^0.13.5"
+langchain-pinecone = "^0.2.2"
+pinecone-notebooks = "^0.1.1"
+langchain-google-genai = "^2.0.9"
+langchain-google-vertexai = "^2.0.12"
+langchain = "^0.3.17"
+langchain-core = "^0.3.33"
+langchain-openai = "^0.3.3"
+langchain-community = "^0.3.16"
+langgraph = "^0.2.68"
 pydantic-settings = "^2.0.0" 
 google-cloud-translate = "^3.19.0"
+email-validator = "^2.2.0"
+fuzzywuzzy = "^0.18.0"
+python-levenshtein = "^0.26.1"
 
 [tool.poetry.scripts]
 start = "main:app" 

@@ -10,12 +10,25 @@ import os
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from app.services.firebase_service import FirebaseService
-cloud_id = os.getenv("FIREBASE_PROJECT_ID", "basetopia-b9302")
+from app.ml.endpoints import router as ml_router
+from fuzzywuzzy import fuzz
+from fuzzywuzzy import process
+from typing import List, Dict
+import re
 
+cloud_id = os.getenv("FIREBASE_PROJECT_ID", "basetopia-b9302")
 router = APIRouter()
 security = HTTPBearer()
 translation_service = VertexAITranslation(project_id=cloud_id)
 firebase_service = FirebaseService()
+
+
+class SearchResult(BaseModel):
+    id: str
+    name: str
+    type: str
+    metadata: dict
+    score: int
 
 
 class UserBase(BaseModel):
@@ -44,6 +57,7 @@ class UserResponse(UserBase):
 class TranslationRequest(BaseModel):
     content: str
     target_language: str
+    input_language: Optional[str] = None
 
 
 class TranslationDictRequest(BaseModel):
@@ -52,14 +66,117 @@ class TranslationDictRequest(BaseModel):
     fields_to_translate: list
 
 
+@router.get("/search")
+async def search(
+    query: str = Query(..., min_length=2,
+                       description="Search query for players or teams"),
+    limit: int = Query(default=10, le=50,
+                       description="Maximum number of results"),
+    threshold: int = Query(
+        default=60, le=100, description="Minimum similarity score (0-100)")
+):
+    try:
+        normalized_query = normalize_text(query)
+
+        players = await firebase_service.get_searchable_players()
+        teams = await firebase_service.get_searchable_teams()
+
+        results = []
+
+        player_matches = search_entities(
+            players, normalized_query, "player", threshold)
+        results.extend(player_matches)
+
+        team_matches = search_entities(
+            teams, normalized_query, "team", threshold)
+        results.extend(team_matches)
+
+        sorted_results = sorted(
+            results, key=lambda x: x.score, reverse=True)[:limit]
+
+        return {"results": sorted_results}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Search failed: {str(e)}"
+        )
+
+
+def normalize_text(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def get_match_score(query: str, target: str) -> int:
+    query = str(query)
+    target = str(target)
+
+    ratio = fuzz.ratio(query, target)
+    partial_ratio = fuzz.partial_ratio(query, target)
+    token_sort_ratio = fuzz.token_sort_ratio(query, target)
+    token_set_ratio = fuzz.token_set_ratio(query, target)
+
+    return max([ratio, partial_ratio, token_sort_ratio, token_set_ratio])
+
+
+def search_entities(entities: List[Dict], query: str, entity_type: str, threshold: int) -> List[SearchResult]:
+    results = []
+
+    for entity in entities:
+        score = get_match_score(query, normalize_text(entity["name"]))
+
+        if entity_type == "team" and "alternative_names" in entity:
+            for alt_name in entity["alternative_names"]:
+                if alt_name:
+                    alt_score = get_match_score(
+                        query, normalize_text(alt_name))
+                    score = max(score, alt_score)
+
+        if score >= threshold:
+            results.append(
+                SearchResult(
+                    id=entity["id"],
+                    name=entity["name"],
+                    type=entity_type,
+                    metadata=entity["metadata"],
+                    score=score
+                )
+            )
+
+    return results
+
+
+def create_metadata(entity: Dict, entity_type: str) -> Dict:
+    if entity_type == "player":
+        return {
+            "position": entity.get("position"),
+            "team": entity.get("team_name"),
+            "number": entity.get("number"),
+            "image_url": entity.get("image_url"),
+            "nationality": entity.get("nationality"),
+            "age": entity.get("age")
+        }
+    else:
+        return {
+            "league": entity.get("league"),
+            "country": entity.get("country"),
+            "logo_url": entity.get("logo_url"),
+            "stadium": entity.get("stadium"),
+            "founded": entity.get("founded")
+        }
+
+
 @router.post("/translate")
 async def translate_text(request: TranslationRequest):
     """
     Translate a single block of text to the target language.
+    valid language inputs: en, es, ja
     """
     try:
         translated_text = translation_service.translate_text(
-            request.content, request.target_language
+            request.content, request.target_language, request.source_language
         )
         return {"translated_text": translated_text}
     except Exception as e:
@@ -234,3 +351,5 @@ async def unfollow_player(
         players.remove(player_id)
         return await firebase_service.update_user(uid, {"players_following": players})
     return user_data
+
+router.include_router(ml_router)
