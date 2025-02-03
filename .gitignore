@@ -5,3 +5,4 @@ basetopia_creds.json
 .env.local
 .vscode
 Dockerfile
+.env.test
