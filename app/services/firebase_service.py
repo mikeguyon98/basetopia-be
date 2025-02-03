@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from datetime import datetime
 from typing import Optional
 
+
 class FirebaseService:
     def __init__(self):
         self.db = firestore.client()
@@ -107,16 +108,17 @@ class FirebaseService:
         """
         try:
             # Order the posts by 'id' in ascending order (since IDs are autoincremented)
-            query = self.posts_collection.order_by('id', direction=firestore.Query.ASCENDING)
-            
+            query = self.posts_collection.order_by(
+                'id', direction=firestore.Query.ASCENDING)
+
             # If a cursor is provided, start after it
             if last_cursor:
                 last_id = last_cursor['id']
                 query = query.start_after({'id': last_id})
-            
+
             # Limit the results to the page size
             query = query.limit(page_size)
-            
+
             # Fetch the documents for the current page
             docs = query.stream()
             data = []
@@ -124,7 +126,7 @@ class FirebaseService:
                 doc_data = doc.to_dict()
                 doc_data['id'] = doc.id  # Include the ID in the data
                 data.append(doc_data)
-                
+
             # Get the 'id' of the last document for the next page cursor
             if data:
                 last_doc = data[-1]
@@ -133,7 +135,7 @@ class FirebaseService:
                 }
             else:
                 next_page_cursor = None
-                
+
             return {
                 "data": data,
                 "next_page_cursor": next_page_cursor
