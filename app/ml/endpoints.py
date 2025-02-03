@@ -6,7 +6,10 @@ from enum import Enum
 from app.services.translator import VertexAITranslation
 from app.services.firebase_service import FirebaseService
 from app.ml.output_schema import AgentResponse
+from app.ml.tag_agent import run_agent as tag_agent
 from datetime import datetime
+from app.api.utils import verify_firebase_token
+from fastapi import Depends
 
 router = APIRouter(
     prefix="/ml",
@@ -32,8 +35,12 @@ class AgentQueryResponse(BaseModel):
     final_response: FinalResponse
     error: Optional[str] = None
 
+class PostData(FinalResponse):
+    player_tags: Optional[List[str]] = None
+    team_tags: Optional[List[str]] = None
+
 class SaveHighlightRequest(BaseModel):
-    highlight_data: FinalResponse
+    highlight_data: PostData
 
 class SaveHighlightResponse(BaseModel):
     success: bool
@@ -44,10 +51,29 @@ class NextPageCursor(BaseModel):
     created_at: str
     id: str
 
+class PostLocalization(BaseModel):
+    title: str
+    content: str
+    # Add any additional localized fields as needed
+
+class Post(BaseModel):
+    created_at: datetime
+    user_email: str
+    player_tags: List[str] = []
+    team_tags: List[str] = []
+    id: int
+    en: PostLocalization
+    ja: Optional[PostLocalization] = None
+    es: Optional[PostLocalization] = None
+
 class PaginatedHighlightsResponse(BaseModel):
-    posts: List[AgentResponse]
+    posts: List[Post]
     next_page_cursor: Optional[NextPageCursor]
     page_size: int
+
+class TagResponse(BaseModel):
+    player_tags: List[str]
+    team_tags: List[str]
 
 firebase_service = FirebaseService()
 
@@ -105,15 +131,24 @@ async def query_agent(request: AgentQueryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/posts", response_model=SaveHighlightResponse, status_code=201)
-async def post_highlight(request: SaveHighlightRequest):
+async def post_highlight(request: SaveHighlightRequest, token_data: dict = Depends(verify_firebase_token)):
     """
     Post a highlight to Firebase.
     """
     try:
-        doc_id = await firebase_service.save_highlight_post(request.highlight_data.dict())
+        user_email = token_data.get("email")
+        doc_id = await firebase_service.save_highlight_post(request.highlight_data.dict(), user_email)
         return SaveHighlightResponse(success=True, document_id=doc_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.put("/posts/{post_id}", response_model=SaveHighlightResponse)
+async def update_highlight(post_id: str, request: SaveHighlightRequest, token_data: dict = Depends(verify_firebase_token)):
+    """
+    Update a highlight post.
+    """
+    user_email = token_data.get("email")
+    return await firebase_service.update_highlight_post(post_id, request.highlight_data.dict(), user_email)
 
 @router.get("/posts", response_model=PaginatedHighlightsResponse)
 async def get_highlight_posts(
@@ -154,3 +189,47 @@ async def get_highlight_posts(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/posts/all", response_model=List[Post])
+async def get_all_posts():
+    """
+    Get all posts from Firebase.
+    """
+    return await firebase_service.get_all_posts()
+    
+
+@router.get("/posts/{post_id}", response_model=Post)
+async def get_post_by_id(post_id: str):
+    """
+    Get a post by its ID.
+    """
+    return await firebase_service.get_post_by_id(post_id)
+    
+@router.post("/tags", response_model=TagResponse)
+async def get_document_tags(request: SaveHighlightRequest):
+    """
+    Get the tags for a document.
+    """
+    try:
+        request_dict = request.highlight_data.dict()
+        english_response = request_dict["en"]
+        tag_query = f"{english_response}"
+        tags = tag_agent(tag_query)
+        print(tags)
+        return TagResponse(player_tags=tags.player_tags, team_tags=tags.team_tags)
+    except Exception as e:
+        return TagResponse(player_tags=[], team_tags=[])
+    
+@router.get("/posts/player/{tag}", response_model=List[Post])  
+async def get_posts_by_player_tag(tag: str):
+    """
+    Get posts by player tag.
+    """
+    return await firebase_service.get_posts_by_player_tag(tag)
+
+@router.get("/posts/team/{tag}", response_model=List[Post])
+async def get_posts_by_team_tag(tag: str):
+    """
+    Get posts by team tag.
+    """
+    return await firebase_service.get_posts_by_team_tag(tag)

@@ -45,6 +45,71 @@ def setup_pinecone():
     vector_store = PineconeVectorStore(index=index, embedding=embeddings)
     return vector_store
 
+def setup_players_pinecone():
+    if not os.getenv("PINECONE_API_KEY"):
+        os.environ["PINECONE_API_KEY"] = getpass.getpass("Enter your Pinecone API key: ")
+
+    pinecone_api_key = os.environ.get("PINECONE_API_KEY")
+
+    pc = Pinecone(api_key=pinecone_api_key)
+    index_name = "basetopia-players-index"  # change if desired
+
+    existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
+
+    if index_name not in existing_indexes:
+        pc.create_index(
+            name=index_name,
+            dimension=768,
+            metric="cosine",
+            spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+        )
+        while not pc.describe_index(index_name).status["ready"]:
+            time.sleep(1)
+
+    index = pc.Index(index_name)
+    embeddings = get_vertex_embeddings()
+    vector_store = PineconeVectorStore(index=index, embedding=embeddings)
+    return vector_store
+
+def bulk_upload_players_to_pinecone(vector_store, batch_size=500):
+    load_dotenv()
+    db = firestore.Client()
+    players_ref = db.collection("players")
+    all_players_docs = list(players_ref.stream())
+    total_docs = len(all_players_docs)
+    print(f"Fetched {total_docs} player docs from Firestore.")
+
+    created_count = 0
+
+    for i in range(0, total_docs, batch_size):
+        batch_docs = all_players_docs[i : i + batch_size]
+        documents = []
+        for doc_snapshot in batch_docs:
+            doc_data = doc_snapshot.to_dict()
+            player_name = doc_data.get("mlb_person_fullName", "No name found")
+            player_id = doc_snapshot.id
+            player_team = doc_data.get("mlb_person_team_id", "No team found")
+            player_position = doc_data.get("mlb_person_position_id", "No position found")
+            
+            document = Document(
+                page_content=player_name,
+                metadata={
+                    "player_id": player_id,
+                    "player_team": player_team,
+                    "player_position": player_position,
+                },
+            )
+            documents.append(document)
+
+        print(f"Prepared batch {i // batch_size + 1} with {len(documents)} documents for Pinecone upload.")
+
+        uuids = [str(uuid4()) for _ in documents]
+        vector_store.add_documents(documents=documents, ids=uuids)
+
+        created_count += len(documents)
+        print(f"Successfully uploaded batch {i // batch_size + 1} to Pinecone ({created_count} docs created).")
+
+    print(f"Done! Created {created_count} new docs in Pinecone.")
 
 def bulk_upload_firestore_highlights_to_pinecone(vector_store, batch_size=500):
     load_dotenv()
@@ -114,6 +179,20 @@ def get_vector_store():
     vector_store = PineconeVectorStore(index=index, embedding=embeddings)
     return vector_store
 
+def get_players_vector_store():
+    pinecone_api_key = os.environ.get("PINECONE_API_KEY")
+    if not pinecone_api_key:
+        os.environ["PINECONE_API_KEY"] = getpass.getpass("Enter your Pinecone API key: ")
+        pinecone_api_key = os.environ["PINECONE_API_KEY"]
+    
+    pc = Pinecone(api_key=pinecone_api_key)
+    index_name = "basetopia-players-index"
+
+    index = pc.Index(index_name)
+    embeddings = get_vertex_embeddings()
+    vector_store = PineconeVectorStore(index=index, embedding=embeddings)
+    return vector_store
+
 def main():
     vector_store = setup_pinecone()
     bulk_upload_firestore_highlights_to_pinecone(vector_store)
@@ -125,7 +204,11 @@ def test():
     for doc in docs:
         print(doc.page_content)
 
+def upload_players_to_pinecone():
+    vector_store = setup_players_pinecone()
+    bulk_upload_players_to_pinecone(vector_store)
+
 if __name__ == "__main__":
     load_dotenv()
     # main()
-    test()
+    # upload_players_to_pinecone()

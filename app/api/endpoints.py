@@ -484,3 +484,8 @@ async def unfollow_player(
     return user_data
 
 router.include_router(ml_router)
+
+
+@router.get("/posts/search")
+async def search_posts(query: str):
+    return await firebase_service.search_posts(query)
