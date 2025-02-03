@@ -82,6 +82,17 @@ class FirebaseService:
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to save highlight: {str(e)}")
+        
+    async def update_highlight_post(self, post_id: str, highlight_data: dict, user_email: str) -> str:
+        """
+        Update a highlight post.
+        """
+        get_post = await self.get_post_by_id(post_id)
+        if get_post["user_email"] != user_email:
+            raise HTTPException(status_code=403, detail="You are not allowed to update this post")
+        post_doc_ref = self.posts_collection.document(post_id)
+        post_doc_ref.update(highlight_data)
+        return post_id
 
     async def get_paginated_highlights(self, page_size: int, last_cursor: Optional[dict] = None) -> dict:
         """

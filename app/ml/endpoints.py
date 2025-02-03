@@ -8,7 +8,7 @@ from app.services.firebase_service import FirebaseService
 from app.ml.output_schema import AgentResponse
 from app.ml.tag_agent import run_agent as tag_agent
 from datetime import datetime
-from app.api.endpoints import verify_firebase_token
+from app.api.utils import verify_firebase_token
 from fastapi import Depends
 
 router = APIRouter(
@@ -130,6 +130,14 @@ async def post_highlight(request: SaveHighlightRequest, token_data: dict = Depen
         return SaveHighlightResponse(success=True, document_id=doc_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.put("/posts/{post_id}", response_model=SaveHighlightResponse)
+async def update_highlight(post_id: str, request: SaveHighlightRequest, token_data: dict = Depends(verify_firebase_token)):
+    """
+    Update a highlight post.
+    """
+    user_email = token_data.get("email")
+    return await firebase_service.update_highlight_post(post_id, request.highlight_data.dict(), user_email)
 
 @router.get("/posts", response_model=PaginatedHighlightsResponse)
 async def get_highlight_posts(
@@ -172,7 +180,7 @@ async def get_highlight_posts(
         raise HTTPException(status_code=500, detail=str(e))
     
 
-    
+@router.get("/posts/{post_id}", response_model=Posts)
 async def get_post_by_id(post_id: str):
     """
     Get a post by its ID.
