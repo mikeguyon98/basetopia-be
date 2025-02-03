@@ -51,12 +51,23 @@ class NextPageCursor(BaseModel):
     created_at: str
     id: str
 
-class Posts(AgentResponse):
-    player_tags: List[str]
-    team_tags: List[str]
+class PostLocalization(BaseModel):
+    title: str
+    content: str
+    # Add any additional localized fields as needed
+
+class Post(BaseModel):
+    created_at: datetime
+    user_email: str
+    player_tags: List[str] = []
+    team_tags: List[str] = []
+    id: int
+    en: PostLocalization
+    ja: Optional[PostLocalization] = None
+    es: Optional[PostLocalization] = None
 
 class PaginatedHighlightsResponse(BaseModel):
-    posts: List[Posts]
+    posts: List[Post]
     next_page_cursor: Optional[NextPageCursor]
     page_size: int
 
@@ -179,8 +190,15 @@ async def get_highlight_posts(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
+@router.get("/posts/all", response_model=List[Post])
+async def get_all_posts():
+    """
+    Get all posts from Firebase.
+    """
+    return await firebase_service.get_all_posts()
+    
 
-@router.get("/posts/{post_id}", response_model=Posts)
+@router.get("/posts/{post_id}", response_model=Post)
 async def get_post_by_id(post_id: str):
     """
     Get a post by its ID.
@@ -202,14 +220,14 @@ async def get_document_tags(request: SaveHighlightRequest):
     except Exception as e:
         return TagResponse(player_tags=[], team_tags=[])
     
-@router.get("/posts/player/{tag}", response_model=List[Posts])  
+@router.get("/posts/player/{tag}", response_model=List[Post])  
 async def get_posts_by_player_tag(tag: str):
     """
     Get posts by player tag.
     """
     return await firebase_service.get_posts_by_player_tag(tag)
 
-@router.get("/posts/team/{tag}", response_model=List[Posts])
+@router.get("/posts/team/{tag}", response_model=List[Post])
 async def get_posts_by_team_tag(tag: str):
     """
     Get posts by team tag.

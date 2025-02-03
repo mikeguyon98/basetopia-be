@@ -10,6 +10,7 @@ class FirebaseService:
         self.users_collection = self.db.collection('users')
         self.highlights_collection = self.db.collection('highlights')
         self.posts_collection = self.db.collection('posts')
+        self.docs_collection = self.db.collection('docs')
 
     async def get_user(self, uid: str):
         doc_ref = self.users_collection.document(uid)
@@ -43,6 +44,11 @@ class FirebaseService:
             raise HTTPException(status_code=404, detail="User not found")
         doc_ref.delete()
         return {"message": "User deleted successfully"}
+    
+    async def get_all_posts(self):
+        query = self.posts_collection.order_by('id', direction=firestore.Query.ASCENDING)
+        docs = query.stream()
+        return [doc.to_dict() for doc in docs]
 
     # ### New Methods Added Below ###
     async def save_highlight_post(self, highlight_data: dict, user_email: str) -> str:
@@ -51,6 +57,7 @@ class FirebaseService:
 
         Args:
             highlight_data (dict): The highlight data to be saved.
+            user_email (str): The email of the user saving the highlight.
 
         Returns:
             str: The autoincremented document ID.
@@ -58,23 +65,29 @@ class FirebaseService:
         try:
             from firebase_admin import firestore
 
+            # Set the created_at timestamp
             highlight_data['created_at'] = datetime.now()
 
-            # Reference to the counter document
+            # Reference to the counter document and increment atomically
             counter_doc_ref = self.db.collection('counters').document('posts')
-
-            # Atomically increment the counter
             counter_doc_ref.update({'count': firestore.Increment(1)})
 
             # Get the new counter value
             counter_snapshot = counter_doc_ref.get()
             new_counter_value = counter_snapshot.get('count')
+
+            # Ensure tags have default empty list if not provided
             if highlight_data.get("player_tags") is None:
                 highlight_data["player_tags"] = []
             if highlight_data.get("team_tags") is None:
                 highlight_data["team_tags"] = []
+
             highlight_data["user_email"] = user_email
-            # Set the new post with the autoincremented ID
+            
+            # **Add the auto-incremented ID into the document data**
+            highlight_data["id"] = new_counter_value
+
+            # Use the new counter value as the document id (converted to string)
             post_id = str(new_counter_value)
             post_doc_ref = self.posts_collection.document(post_id)
             post_doc_ref.set(highlight_data)
@@ -101,36 +114,36 @@ class FirebaseService:
 
         Args:
             page_size (int): Number of items per page.
-            last_cursor (Optional[dict]): Dictionary containing 'id' of the last item from the previous page.
+            last_cursor (Optional[dict]): Dict containing 'created_at' and 'id' of the last item from previous page.
 
         Returns:
-            dict: Contains 'data' and 'next_page_cursor'.
+            dict: Contains 'data' (list of posts) and 'next_page_cursor'.
         """
         try:
-            # Order the posts by 'id' in ascending order (since IDs are autoincremented)
-            query = self.posts_collection.order_by(
-                'id', direction=firestore.Query.ASCENDING)
+            # Order by 'created_at' first and then 'id' as a tie-breaker
+            query = self.posts_collection.order_by('created_at', direction=firestore.Query.ASCENDING) \
+                                       .order_by('id', direction=firestore.Query.ASCENDING)
 
-            # If a cursor is provided, start after it
+            # If a cursor is provided, start after the last document using both fields
             if last_cursor:
-                last_id = last_cursor['id']
-                query = query.start_after({'id': last_id})
+                query = query.start_after(last_cursor['created_at'], last_cursor['id'])
 
             # Limit the results to the page size
             query = query.limit(page_size)
 
-            # Fetch the documents for the current page
             docs = query.stream()
             data = []
             for doc in docs:
                 doc_data = doc.to_dict()
-                doc_data['id'] = doc.id  # Include the ID in the data
+                # Ensure the 'id' field is in the returned data.
+                doc_data['id'] = doc_data.get('id') or doc.id
                 data.append(doc_data)
 
-            # Get the 'id' of the last document for the next page cursor
+            # Prepare next_page_cursor for response if there is at least one document
             if data:
                 last_doc = data[-1]
                 next_page_cursor = {
+                    'created_at': last_doc['created_at'],
                     'id': last_doc['id']
                 }
             else:
@@ -143,6 +156,7 @@ class FirebaseService:
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to retrieve highlights: {str(e)}")
+        
         
     async def get_post_by_id(self, post_id: str):
         doc_ref = self.posts_collection.document(post_id)
