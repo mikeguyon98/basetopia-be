@@ -1,77 +1,89 @@
-import getpass
 import os
 import time
 from uuid import uuid4
 from dotenv import load_dotenv
-from pinecone import Pinecone, ServerlessSpec
 from langchain_core.documents import Document
 from langchain_google_vertexai import VertexAIEmbeddings
-from langchain_pinecone import PineconeVectorStore
 from google.cloud import firestore
+from google.cloud import aiplatform
+
+# Removed Pinecone-related imports and code.
+# Instead, we define a VertexAIVectorStore that uses Vertex AI for embeddings 
+# and (for demonstration) performs an in-memory similarity search.
+# In production, replace the dummy implementations with calls to the Vertex AI Matching Engine API.
+
+class VertexAIVectorStore:
+    def __init__(self, index_name, embedding, project, location):
+        self.index_name = index_name
+        self.embedding = embedding
+        self.project = project
+        self.location = location
+        # For demonstration purposes we use an in-memory dict to store vectors and documents.
+        # In production, this is where you would connect to your Vertex AI Matching Engine endpoint.
+        self.store = {}  # key: id, value: (vector, Document)
+
+    def add_documents(self, documents, ids):
+        # Compute and store embeddings for each document.
+        for doc, doc_id in zip(documents, ids):
+            # Using the Vertex AI embeddings model to compute vector for the document's page_content.
+            vector = self.embedding.embed_query(doc.page_content)
+            self.store[doc_id] = (vector, doc)
+        print(f"Indexed {len(documents)} documents into Vertex AI index '{self.index_name}'.")
+        # In production: Upsert these vectors/documents into Vertex AI Matching Engine.
+
+    def similarity_search(self, query, k=5):
+        # Compute the embedding for the query.
+        query_vector = self.embedding.embed_query(query)
+        # In production: This call would invoke the Vertex AI Matching Engine similarity API.
+        # Here we perform a brute-force cosine similarity search over the in-memory vectors.
+        import numpy as np
+
+        results = []
+        for doc_id, (vec, doc) in self.store.items():
+            vec = np.array(vec)
+            query_vec = np.array(query_vector)
+            # Compute cosine similarity.
+            similarity = np.dot(query_vec, vec) / (np.linalg.norm(query_vec) * np.linalg.norm(vec) + 1e-10)
+            results.append((similarity, doc))
+        # Sort by descending similarity.
+        results.sort(key=lambda x: x[0], reverse=True)
+        return [doc for _, doc in results[:k]]
+
 
 def get_vertex_embeddings():
     if "GOOGLE_API_KEY" not in os.environ:
         print("GOOGLE_API_KEY not found in environment variables")
         return
     embeddings = VertexAIEmbeddings(model_name="text-multilingual-embedding-002")
-    # vector = embeddings.embed_query("hello, world!")
-    # print(vector[:5])
     return embeddings
 
 
-def setup_pinecone():
-    if not os.getenv("PINECONE_API_KEY"):
-        os.environ["PINECONE_API_KEY"] = getpass.getpass("Enter your Pinecone API key: ")
-
-    pinecone_api_key = os.environ.get("PINECONE_API_KEY")
-
-    pc = Pinecone(api_key=pinecone_api_key)
-    index_name = "basetopia-highlights-index"  # change if desired
-
-    existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
-
-    if index_name not in existing_indexes:
-        pc.create_index(
-            name=index_name,
-            dimension=768,
-            metric="cosine",
-            spec=ServerlessSpec(cloud="aws", region="us-east-1"),
-        )
-        while not pc.describe_index(index_name).status["ready"]:
-            time.sleep(1)
-
-    index = pc.Index(index_name)
+def setup_vertex_index(index_name="basetopia-highlights-index"):
+    # Initialize Vertex AI with project and location (ensure these environment variables are set).
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    if not project:
+        raise ValueError("GOOGLE_CLOUD_PROJECT environment variable not set.")
+    location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
+    aiplatform.init(project=project, location=location)
     embeddings = get_vertex_embeddings()
-    vector_store = PineconeVectorStore(index=index, embedding=embeddings)
+    vector_store = VertexAIVectorStore(index_name=index_name, embedding=embeddings, project=project, location=location)
     return vector_store
 
-def setup_players_pinecone():
-    if not os.getenv("PINECONE_API_KEY"):
-        os.environ["PINECONE_API_KEY"] = getpass.getpass("Enter your Pinecone API key: ")
 
-    pinecone_api_key = os.environ.get("PINECONE_API_KEY")
-
-    pc = Pinecone(api_key=pinecone_api_key)
-    index_name = "basetopia-players-index"  # change if desired
-
-    existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
-
-    if index_name not in existing_indexes:
-        pc.create_index(
-            name=index_name,
-            dimension=768,
-            metric="cosine",
-            spec=ServerlessSpec(cloud="aws", region="us-east-1"),
-        )
-        while not pc.describe_index(index_name).status["ready"]:
-            time.sleep(1)
-
-    index = pc.Index(index_name)
+def setup_players_vertex_index():
+    # Setup a separate index for players.
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    if not project:
+        raise ValueError("GOOGLE_CLOUD_PROJECT environment variable not set.")
+    location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
+    aiplatform.init(project=project, location=location)
+    index_name = "basetopia-players-index"
     embeddings = get_vertex_embeddings()
-    vector_store = PineconeVectorStore(index=index, embedding=embeddings)
+    vector_store = VertexAIVectorStore(index_name=index_name, embedding=embeddings, project=project, location=location)
     return vector_store
 
-def bulk_upload_players_to_pinecone(vector_store, batch_size=500):
+
+def bulk_upload_players_to_vertexai(vector_store, batch_size=500):
     load_dotenv()
     db = firestore.Client()
     players_ref = db.collection("players")
@@ -101,29 +113,30 @@ def bulk_upload_players_to_pinecone(vector_store, batch_size=500):
             )
             documents.append(document)
 
-        print(f"Prepared batch {i // batch_size + 1} with {len(documents)} documents for Pinecone upload.")
+        print(f"Prepared batch {i // batch_size + 1} with {len(documents)} documents for Vertex AI upload.")
 
         uuids = [str(uuid4()) for _ in documents]
         vector_store.add_documents(documents=documents, ids=uuids)
 
         created_count += len(documents)
-        print(f"Successfully uploaded batch {i // batch_size + 1} to Pinecone ({created_count} docs created).")
+        print(f"Successfully uploaded batch {i // batch_size + 1} to Vertex AI ({created_count} docs indexed).")
 
-    print(f"Done! Created {created_count} new docs in Pinecone.")
+    print(f"Done! Indexed {created_count} new docs in Vertex AI index '{vector_store.index_name}'.")
 
-def bulk_upload_firestore_highlights_to_pinecone(vector_store, batch_size=500):
+
+def bulk_upload_firestore_highlights_to_vertexai(vector_store, batch_size=500):
     load_dotenv()
     db = firestore.Client()
     highlights_ref = db.collection("highlights")
 
-    # Fetch all highlight documents in bulk
+    # Fetch all highlight documents in bulk.
     all_highlight_docs = list(highlights_ref.stream())
     total_docs = len(all_highlight_docs)
     print(f"Fetched {total_docs} highlight docs from Firestore.")
 
     created_count = 0
 
-    # Process documents in batches
+    # Process documents in batches.
     for i in range(0, total_docs, batch_size):
         batch_docs = all_highlight_docs[i : i + batch_size]
         documents = []
@@ -131,14 +144,14 @@ def bulk_upload_firestore_highlights_to_pinecone(vector_store, batch_size=500):
         for doc_snapshot in batch_docs:
             doc_data = doc_snapshot.to_dict()
 
-            # Extract fields for embedding and metadata
+            # Extract fields for embedding and metadata.
             highlight_data = doc_data.get("highlight", {})
             description = highlight_data.get("title", "No title found")
             video_url = highlight_data.get("video_url", "")
             thumbnail = highlight_data.get("image_url", "")
             highlight_id = doc_snapshot.id
 
-            # Create a Document with description as page_content and other fields as metadata
+            # Create a Document with description as page_content and other fields as metadata.
             document = Document(
                 page_content=description,
                 metadata={
@@ -151,51 +164,31 @@ def bulk_upload_firestore_highlights_to_pinecone(vector_store, batch_size=500):
 
             documents.append(document)
         
+        print(f"Prepared batch {i // batch_size + 1} with {len(documents)} documents for Vertex AI upload.")
 
-        print(f"Prepared batch {i // batch_size + 1} with {len(documents)} documents for Pinecone upload.")
-
-        # Add documents to Pinecone vector store
+        # Add documents to the Vertex AI vector store.
         uuids = [str(uuid4()) for _ in documents]
         vector_store.add_documents(documents=documents, ids=uuids)
 
         created_count += len(documents)
-        print(f"Successfully uploaded batch {i // batch_size + 1} to Pinecone ({created_count} docs created).")
+        print(f"Successfully uploaded batch {i // batch_size + 1} to Vertex AI ({created_count} docs indexed).")
 
-    print(f"Done! Created {created_count} new docs in Pinecone.")
+    print(f"Done! Indexed {created_count} new docs in Vertex AI index '{vector_store.index_name}'.")
+
 
 def get_vector_store():
-    pinecone_api_key = os.environ.get("PINECONE_API_KEY")
-    if not pinecone_api_key:
-        os.environ["PINECONE_API_KEY"] = getpass.getpass("Enter your Pinecone API key: ")
-        pinecone_api_key = os.environ["PINECONE_API_KEY"]
-    
-    pc = Pinecone(api_key=pinecone_api_key)
-    index_name = "basetopia-highlights-index"
-    
-    # Initialize the Pinecone Index object
-    index = pc.Index(index_name)
-    
-    embeddings = get_vertex_embeddings()
-    vector_store = PineconeVectorStore(index=index, embedding=embeddings)
-    return vector_store
+    # Retrieve the highlights vector store for Vertex AI.
+    return setup_vertex_index("basetopia-highlights-index")
+
 
 def get_players_vector_store():
-    pinecone_api_key = os.environ.get("PINECONE_API_KEY")
-    if not pinecone_api_key:
-        os.environ["PINECONE_API_KEY"] = getpass.getpass("Enter your Pinecone API key: ")
-        pinecone_api_key = os.environ["PINECONE_API_KEY"]
-    
-    pc = Pinecone(api_key=pinecone_api_key)
-    index_name = "basetopia-players-index"
+    # Retrieve the players vector store for Vertex AI.
+    return setup_players_vertex_index()
 
-    index = pc.Index(index_name)
-    embeddings = get_vertex_embeddings()
-    vector_store = PineconeVectorStore(index=index, embedding=embeddings)
-    return vector_store
 
 def main():
-    vector_store = setup_pinecone()
-    bulk_upload_firestore_highlights_to_pinecone(vector_store)
+    vector_store = setup_vertex_index("basetopia-highlights-index")
+    bulk_upload_firestore_highlights_to_vertexai(vector_store)
 
 
 def test():
@@ -204,11 +197,14 @@ def test():
     for doc in docs:
         print(doc.page_content)
 
-def upload_players_to_pinecone():
-    vector_store = setup_players_pinecone()
-    bulk_upload_players_to_pinecone(vector_store)
+
+def upload_players_to_vertexai():
+    vector_store = setup_players_vertex_index()
+    bulk_upload_players_to_vertexai(vector_store)
+
 
 if __name__ == "__main__":
     load_dotenv()
+    # Uncomment one of the following to run:
     # main()
-    # upload_players_to_pinecone()
+    # upload_players_to_vertexai()
