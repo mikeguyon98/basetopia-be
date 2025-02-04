@@ -276,3 +276,25 @@ class FirebaseService:
             "teams": matched_teams,
             "posts": [doc.to_dict() for doc in posts_docs],
         }
+    
+    async def get_player_by_id(self, player_id: str):
+        doc_ref = self.players_collection.document(player_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail="Player not found")
+        return doc.to_dict()
+    
+    async def get_all_players(self):
+        docs = self.players_collection.stream()
+        return [doc.to_dict() for doc in docs]
+    
+    async def get_team_by_id(self, team_id: str):
+        doc_ref = self.teams_collection.document(team_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail="Team not found")
+        return doc.to_dict()
+    
+    async def get_all_teams(self):
+        docs = self.teams_collection.stream()
+        return [doc.to_dict() for doc in docs]

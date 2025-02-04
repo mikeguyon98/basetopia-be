@@ -489,3 +489,19 @@ router.include_router(ml_router)
 @router.get("/posts/search")
 async def search_posts(query: str):
     return await firebase_service.search_posts(query)
+
+@router.get("/players/{player_id}")
+async def get_player_by_id(player_id: str):
+    return await firebase_service.get_player_by_id(player_id)
+
+@router.get("/players")
+async def get_all_players():
+    return await firebase_service.get_all_players()
+
+@router.get("/teams/{team_id}")
+async def get_team_by_id(team_id: str):
+    return await firebase_service.get_team_by_id(team_id)
+
+@router.get("/teams")
+async def get_all_teams():
+    return await firebase_service.get_all_teams()
