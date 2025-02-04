@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END, MessagesState
 from langgraph.prebuilt import create_react_agent
-from langchain_openai import ChatOpenAI
+from langchain_google_vertexai import ChatVertexAI
 from app.ml.highlight_tool import (
     is_valid_team,
     get_team_names,
@@ -20,12 +20,12 @@ load_dotenv()
 class AgentState(MessagesState):
     structured_response: TagResponse
 
-# Initialize our base model.
-base_model = ChatOpenAI(model="o3-mini")  # Replace 'gpt-4o' with your model identifier
+# Initialize our base model using Google Vertex AI
+base_model = ChatVertexAI(model="chat-bison@001")  # Replace with your Vertex AI model identifier
 
 prompt = '''You are tasked with tagging a post with the most relevant players and teams.
 You will be given a post and should use the tools to find the most relevant players and teams. If there are no players or teams in the post, return an empty list.
-You should return the player ids and the team ids not their names.
+You should return the player ids and the team ids, not their names.
 
 Remember to only return the player ids and team ids, not their names.
 

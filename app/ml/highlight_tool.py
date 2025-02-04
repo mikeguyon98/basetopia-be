@@ -88,8 +88,3 @@ def get_similar_players(player_name: str) -> List[str]:
     vector_store = get_players_vector_store()
     docs = vector_store.similarity_search(player_name, k=5)
     return [doc.metadata.get("player_name") for doc in docs]
-
-
-# def get_model():
-#     return ChatOpenAI(model="gpt-4o-mini", temperature=0)
-# # 

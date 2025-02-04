@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END, MessagesState
 from langgraph.prebuilt import create_react_agent
-from langchain_openai import ChatOpenAI
+from langchain_google_vertexai import ChatVertexAI
 from app.ml.highlight_tool import (
     get_highlight_docs,
     get_team_highlights,
@@ -18,8 +18,8 @@ load_dotenv()
 class AgentState(MessagesState):
     structured_response: AgentResponse
 
-# Initialize our base model.
-base_model = ChatOpenAI(model="gpt-4o")  # Replace 'gpt-4o' with your model identifier
+# Initialize our base model using Google Vertex AI
+base_model = ChatVertexAI(model="chat-bison@001")  # Replace 'chat-bison@001' with your Vertex AI model identifier
 
 prompt = '''You are a helpful assistant with several tools at your disposal.
 You can use the following tools to help you with your task:
@@ -39,7 +39,7 @@ If at any point you encounter an error, default to the get_highlight_docs tool.
 tools = [get_highlight_docs, get_team_highlights, is_valid_team, get_team_names]
 
 # Create the ReAct agent with structured output.
-# Here, response_format is set to AgentResponse so that a second LLM call will produce
+# Here, response_format is set to AgentResponse so that a second Vertex AI call will produce
 # a structured response conforming to that schema.
 graph_agent = create_react_agent(
     model=base_model,
