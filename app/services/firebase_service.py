@@ -298,3 +298,7 @@ class FirebaseService:
     async def get_all_teams(self):
         docs = self.teams_collection.stream()
         return [doc.to_dict() for doc in docs]
+    
+    async def get_last_30_game_ids(self):
+        docs = self.docs_collection.order_by('game_id', direction=firestore.Query.DESCENDING).limit(30).stream()
+        return [doc.to_dict() for doc in docs]

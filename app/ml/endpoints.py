@@ -84,10 +84,15 @@ async def query_agent(request: AgentQueryRequest):
     """
     try:
         # Run the agent to get the English response
-        response_en = run_agent(request.user_query)
-        
-        # Initialize the translation service
         translator = VertexAITranslation()
+        query_english = request.user_query
+        if request.input_language == SupportedLanguage.SPANISH:
+            query_english = translator.translate_text(request.user_query, "en", source_language="es")
+        elif request.input_language == SupportedLanguage.JAPANESE:
+            query_english = translator.translate_text(request.user_query, "en", source_language="ja")
+
+        response_en = run_agent(query_english)
+        
         
         # Define target languages
         target_languages = ["es", "ja"]
